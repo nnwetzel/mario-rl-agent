@@ -1,40 +1,45 @@
-"""
-README.md
-Foundational Mario RL agent project.
-"""
+# Mario RL Agent — World 1-1
 
-# Mario RL Agent
+Reinforcement learning agents (DQN and PPO) trained to beat Super Mario Bros. World 1-1.
 
-A foundational reinforcement learning agent to beat Super Mario Bros. World 1-1 using OpenAI Gym and gym-super-mario-bros.
+## Setup
+
+```bash
+pip install -r requirements.txt
+```
+
+> **Note:** `nes-py` may require system dependencies on Linux: `sudo apt-get install cmake libz-dev`
+
+## Training
+
+### DQN
+```bash
+python train_dqn.py train --episodes 5000
+```
+
+### PPO
+```bash
+python train_ppo.py train --episodes 5000
+```
+
+Both scripts save checkpoints to `checkpoints/<algorithm>/` and training logs to `logs/<algorithm>/`.
+
+## Watching a Trained Agent Play
+
+```bash
+python train_dqn.py play checkpoints/dqn/best_model.pt
+python train_ppo.py play checkpoints/ppo/best_model.pt
+```
+
+## Key Hyperparameters
+
+Run `python train_dqn.py train --help` or `python train_ppo.py train --help` to see all options.
 
 ## Project Structure
-- `main.py`: Entry point, runs Mario environment with random actions.
-- `agent.py`: Skeleton MarioAgent class.
-- `train.py`: Basic training loop using MarioAgent.
-- `requirements.txt`: Python dependencies.
 
-## Getting Started
-1. Create a virtual environment with Python 3.10 or 3.11 (recommended):
-   ```
-   python3.10 -m venv .venv
-   # or
-   python3.11 -m venv .venv
-   source .venv/bin/activate
-   ```
-2. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-3. Run the environment:
-   ```
-   python main.py
-   ```
-4. (TODO) Run the training loop:
-   ```
-   python train.py
-   ```
-
-## Next Steps
-- Implement learning algorithms (DQN, PPO, etc.)
-- Add reward shaping and evaluation
-- Expand agent capabilities
+| File | Description |
+|------|-------------|
+| `wrappers.py` | Environment wrappers (frame skip, grayscale, resize, stacking, reward shaping) |
+| `train_dqn.py` | DQN agent with experience replay and target network |
+| `train_ppo.py` | PPO agent with actor-critic and GAE |
+| `requirements.txt` | Python dependencies |

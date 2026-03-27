@@ -1,0 +1,195 @@
+"""
+Shared environment wrappers for Super Mario Bros. RL training.
+These wrappers preprocess the game frames and shape rewards.
+"""
+
+import gym
+import numpy as np
+from collections import deque
+import cv2
+
+
+class SkipFrame(gym.Wrapper):
+    """Return only every `skip`-th frame. Repeat the chosen action for `skip` frames.
+    This speeds up training since consecutive frames are very similar."""
+
+    def __init__(self, env, skip=4):
+        super().__init__(env)
+        self._skip = skip
+
+    def step(self, action):
+        total_reward = 0.0
+        for _ in range(self._skip):
+            obs, reward, done, info = self.step_orig(action)
+            total_reward += reward
+            if done:
+                break
+        return obs, total_reward, done, info
+
+    def step_orig(self, action):
+        return self.env.step(action)
+
+
+class GrayScaleObservation(gym.ObservationWrapper):
+    """Convert RGB frames to grayscale to reduce input dimensionality."""
+
+    def __init__(self, env):
+        super().__init__(env)
+        obs_shape = self.observation_space.shape[:2]
+        self.observation_space = gym.spaces.Box(
+            low=0, high=255, shape=obs_shape, dtype=np.uint8
+        )
+
+    def observation(self, observation):
+        observation = cv2.cvtColor(observation, cv2.COLOR_RGB2GRAY)
+        return observation
+
+
+class ResizeObservation(gym.ObservationWrapper):
+    """Resize frames to a smaller square shape (default 84x84).
+    This is standard for Atari/NES RL and reduces computation."""
+
+    def __init__(self, env, shape=84):
+        super().__init__(env)
+        if isinstance(shape, int):
+            self.shape = (shape, shape)
+        else:
+            self.shape = tuple(shape)
+        obs_shape = self.shape + self.observation_space.shape[2:]
+        self.observation_space = gym.spaces.Box(
+            low=0, high=255, shape=obs_shape, dtype=np.uint8
+        )
+
+    def observation(self, observation):
+        observation = cv2.resize(observation, self.shape, interpolation=cv2.INTER_AREA)
+        return observation
+
+
+class NormalizeObservation(gym.ObservationWrapper):
+    """Normalize pixel values from [0, 255] to [0.0, 1.0]."""
+
+    def __init__(self, env):
+        super().__init__(env)
+        obs_shape = self.observation_space.shape
+        self.observation_space = gym.spaces.Box(
+            low=0.0, high=1.0, shape=obs_shape, dtype=np.float32
+        )
+
+    def observation(self, observation):
+        return np.array(observation, dtype=np.float32) / 255.0
+
+
+class FrameStack(gym.Wrapper):
+    """Stack the last `num_stack` frames as the observation.
+    This gives the agent a sense of motion/velocity."""
+
+    def __init__(self, env, num_stack=4):
+        super().__init__(env)
+        self._num_stack = num_stack
+        self._frames = deque(maxlen=num_stack)
+        low = np.repeat(self.observation_space.low[np.newaxis, ...], num_stack, axis=0)
+        high = np.repeat(self.observation_space.high[np.newaxis, ...], num_stack, axis=0)
+        self.observation_space = gym.spaces.Box(
+            low=low, high=high, dtype=self.observation_space.dtype
+        )
+
+    def reset(self):
+        obs = self.env.reset()
+        for _ in range(self._num_stack):
+            self._frames.append(obs)
+        return self._get_obs()
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        self._frames.append(obs)
+        return self._get_obs(), reward, done, info
+
+    def _get_obs(self):
+        return np.array(self._frames)
+
+
+class CustomRewardWrapper(gym.Wrapper):
+    """Custom reward shaping for Mario:
+    - Reward forward movement (x-position delta)
+    - Penalize death heavily
+    - Small time penalty to encourage speed
+    - Bonus for clearing the level
+    """
+
+    def __init__(self, env):
+        super().__init__(env)
+        self._last_x_pos = 0
+        self._last_status = "small"
+
+    def reset(self):
+        obs = self.env.reset()
+        self._last_x_pos = 0
+        self._last_status = "small"
+        return obs
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+
+        # Reward for moving right (forward progress)
+        x_pos = info.get("x_pos", 0)
+        x_reward = (x_pos - self._last_x_pos) / 10.0
+        self._last_x_pos = x_pos
+
+        # Penalty for dying
+        death_penalty = 0
+        if done and info.get("flag_get", False) is False:
+            death_penalty = -50.0
+
+        # Bonus for completing the level (reaching the flag)
+        flag_bonus = 0
+        if info.get("flag_get", False):
+            flag_bonus = 500.0
+
+        # Penalty for losing a powerup (taking damage)
+        status_penalty = 0
+        current_status = info.get("status", "small")
+        if self._last_status in ("tall", "fireball") and current_status == "small":
+            status_penalty = -25.0
+        self._last_status = current_status
+
+        # Small time penalty to encourage faster completion
+        time_penalty = -0.1
+
+        shaped_reward = x_reward + death_penalty + flag_bonus + status_penalty + time_penalty
+        return obs, shaped_reward, done, info
+
+
+def make_mario_env(use_custom_rewards=True):
+    """Create and wrap the Super Mario Bros. environment.
+
+    Args:
+        use_custom_rewards: If True, apply custom reward shaping.
+                           If False, use the default env rewards.
+
+    Returns:
+        Wrapped gym environment ready for training.
+    """
+    import gym_super_mario_bros
+    from nes_py.wrappers import JoypadSpace
+    from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
+
+    # Create the environment
+    env = gym_super_mario_bros.make("SuperMarioBros-1-1-v0")
+
+    # Restrict action space to simple movements:
+    # [['NOOP'], ['right'], ['right', 'A'], ['right', 'B'],
+    #  ['right', 'A', 'B'], ['A'], ['left']]
+    env = JoypadSpace(env, SIMPLE_MOVEMENT)
+
+    # Apply custom reward shaping
+    if use_custom_rewards:
+        env = CustomRewardWrapper(env)
+
+    # Frame preprocessing pipeline
+    env = SkipFrame(env, skip=4)
+    env = GrayScaleObservation(env)
+    env = ResizeObservation(env, shape=84)
+    env = NormalizeObservation(env)
+    env = FrameStack(env, num_stack=4)
+
+    return env
