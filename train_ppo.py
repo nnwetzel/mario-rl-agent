@@ -326,7 +326,7 @@ class PPOAgent:
         )
 
     def load(self, path):
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         self.network.load_state_dict(checkpoint["network"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         self.total_steps = checkpoint["total_steps"]
@@ -554,11 +554,11 @@ def parse_args():
 
     args = parser.parse_args()
     if args.mode is None:
+        # Default to train mode with all defaults when no subcommand given
         args.mode = "train"
         for action in train_parser._actions:
             if hasattr(action, "default") and action.dest != "help":
-                if not hasattr(args, action.dest) or getattr(args, action.dest) is None:
-                    setattr(args, action.dest, action.default)
+                setattr(args, action.dest, action.default)
     return args
 
 

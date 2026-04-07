@@ -208,7 +208,7 @@ class DQNAgent:
 
     def load(self, path):
         """Load model checkpoint."""
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         self.policy_net.load_state_dict(checkpoint["policy_net"])
         self.target_net.load_state_dict(checkpoint["target_net"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
@@ -221,6 +221,14 @@ class DQNAgent:
 
 def train(args):
     """Main training loop for DQN."""
+
+    # Set random seeds for reproducibility
+    seed = getattr(args, "seed", 42)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
 
     # Create directories
     checkpoint_dir = Path(args.checkpoint_dir)
@@ -440,12 +448,11 @@ def parse_args():
 
     args = parser.parse_args()
     if args.mode is None:
+        # Default to train mode with all defaults when no subcommand given
         args.mode = "train"
-        # Set defaults for train mode
         for action in train_parser._actions:
             if hasattr(action, "default") and action.dest != "help":
-                if not hasattr(args, action.dest) or getattr(args, action.dest) is None:
-                    setattr(args, action.dest, action.default)
+                setattr(args, action.dest, action.default)
     return args
 
 

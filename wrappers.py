@@ -20,18 +20,20 @@ class SkipFrame(gym.Wrapper):
     def step(self, action):
         total_reward = 0.0
         for _ in range(self._skip):
-            obs, reward, done, info = self.step_orig(action)
+            obs, reward, done, info = self.env.step(action)
             total_reward += reward
             if done:
                 break
         return obs, total_reward, done, info
 
-    def step_orig(self, action):
-        return self.env.step(action)
-
 
 class GrayScaleObservation(gym.ObservationWrapper):
-    """Convert RGB frames to grayscale to reduce input dimensionality."""
+    """Convert RGB frames to grayscale to reduce input dimensionality.
+
+    Note: We override step() and reset() explicitly to stay compatible
+    with the old gym API used by nes-py (4-tuple step, single-value reset),
+    since gym 0.26+ ObservationWrapper base methods expect the new 5-tuple API.
+    """
 
     def __init__(self, env):
         super().__init__(env)
@@ -41,13 +43,23 @@ class GrayScaleObservation(gym.ObservationWrapper):
         )
 
     def observation(self, observation):
-        observation = cv2.cvtColor(observation, cv2.COLOR_RGB2GRAY)
-        return observation
+        return cv2.cvtColor(observation, cv2.COLOR_RGB2GRAY)
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        return self.observation(obs), reward, done, info
+
+    def reset(self, **kwargs):
+        obs = self.env.reset()
+        return self.observation(obs)
 
 
 class ResizeObservation(gym.ObservationWrapper):
     """Resize frames to a smaller square shape (default 84x84).
-    This is standard for Atari/NES RL and reduces computation."""
+    This is standard for Atari/NES RL and reduces computation.
+
+    Note: step()/reset() overridden for nes-py old-API compatibility.
+    """
 
     def __init__(self, env, shape=84):
         super().__init__(env)
@@ -61,12 +73,22 @@ class ResizeObservation(gym.ObservationWrapper):
         )
 
     def observation(self, observation):
-        observation = cv2.resize(observation, self.shape, interpolation=cv2.INTER_AREA)
-        return observation
+        return cv2.resize(observation, self.shape, interpolation=cv2.INTER_AREA)
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        return self.observation(obs), reward, done, info
+
+    def reset(self, **kwargs):
+        obs = self.env.reset()
+        return self.observation(obs)
 
 
 class NormalizeObservation(gym.ObservationWrapper):
-    """Normalize pixel values from [0, 255] to [0.0, 1.0]."""
+    """Normalize pixel values from [0, 255] to [0.0, 1.0].
+
+    Note: step()/reset() overridden for nes-py old-API compatibility.
+    """
 
     def __init__(self, env):
         super().__init__(env)
@@ -77,6 +99,14 @@ class NormalizeObservation(gym.ObservationWrapper):
 
     def observation(self, observation):
         return np.array(observation, dtype=np.float32) / 255.0
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        return self.observation(obs), reward, done, info
+
+    def reset(self, **kwargs):
+        obs = self.env.reset()
+        return self.observation(obs)
 
 
 class FrameStack(gym.Wrapper):
@@ -173,8 +203,12 @@ def make_mario_env(use_custom_rewards=True):
     from nes_py.wrappers import JoypadSpace
     from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
 
-    # Create the environment
+    # Create the environment.
+    # gym 0.26+ auto-wraps with TimeLimit/PassiveEnvChecker using the new 5-tuple
+    # step API, but nes-py uses the old 4-tuple API — this causes a ValueError.
+    # We unwrap back to the raw NESEnv before applying our own wrappers.
     env = gym_super_mario_bros.make("SuperMarioBros-1-1-v0")
+    env = env.unwrapped  # strip gym's auto-added TimeLimit / PassiveEnvChecker
 
     # Restrict action space to simple movements:
     # [['NOOP'], ['right'], ['right', 'A'], ['right', 'B'],
