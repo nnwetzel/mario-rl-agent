@@ -381,37 +381,69 @@ def play(args):
 
     agent = DQNAgent(state_shape=state_shape, n_actions=n_actions)
     agent.load(args.model_path)
-    agent.epsilon_start = 0.0  # No exploration during evaluation
-    agent.epsilon_end = 0.0
+    # Allow a small epsilon during eval to break deterministic loops
+    agent.epsilon_start = args.eval_epsilon
+    agent.epsilon_end = args.eval_epsilon
     agent.steps_done = agent.epsilon_decay + 1
 
+    delay = args.delay  # seconds to sleep between each frame (0 = full speed)
+
     print(f"Loaded model from {args.model_path}")
-    print(f"Playing {args.play_episodes} episodes...\n")
+    print(f"Playing {args.play_episodes} episodes at delay={delay}s per step")
+    print(f"  delay=0.0  → full speed")
+    print(f"  delay=0.033 → ~30 FPS (normal game speed)")
+    print(f"  delay=0.1  → slow motion")
+    print(f"  delay=0.3  → very slow (good for evaluation)\n")
+
+    all_results = []
 
     for episode in range(1, args.play_episodes + 1):
         state = env.reset()
         total_reward = 0
         steps = 0
+        max_x = 0
 
         while True:
             env.render()
+            if delay > 0:
+                time.sleep(delay)
+
             action = agent.select_action(state)
             state, reward, done, info = env.step(action)
             total_reward += reward
             steps += 1
+            max_x = max(max_x, info.get("x_pos", 0))
 
             if done:
-                flag = "YES" if info.get("flag_get", False) else "no"
+                flag = info.get("flag_get", False)
                 print(
-                    f"Episode {episode} | "
-                    f"Reward: {total_reward:.2f} | "
-                    f"Steps: {steps} | "
-                    f"X-Pos: {info.get('x_pos', 0)} | "
-                    f"Flag: {flag}"
+                    f"Episode {episode:3d} | "
+                    f"Reward: {total_reward:8.2f} | "
+                    f"Steps: {steps:5d} | "
+                    f"Max X: {max_x:5d} / 3161 | "
+                    f"Flag: {'✓ COMPLETED' if flag else '✗ died'}"
                 )
+                all_results.append({
+                    "episode": episode,
+                    "reward": total_reward,
+                    "steps": steps,
+                    "max_x": max_x,
+                    "flag": flag,
+                })
                 break
 
     env.close()
+
+    # Summary
+    flags = sum(1 for r in all_results if r["flag"])
+    avg_x = sum(r["max_x"] for r in all_results) / len(all_results)
+    avg_reward = sum(r["reward"] for r in all_results) / len(all_results)
+    print(f"\n{'='*55}")
+    print(f"  Results over {len(all_results)} episodes:")
+    print(f"  Level completions : {flags}/{len(all_results)} ({100*flags/len(all_results):.0f}%)")
+    print(f"  Avg max X-position: {avg_x:.0f} / 3161 ({100*avg_x/3161:.0f}% of level)")
+    print(f"  Avg reward        : {avg_reward:.2f}")
+    print(f"{'='*55}")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -445,6 +477,11 @@ def parse_args():
     play_parser = subparsers.add_parser("play", help="Watch a trained agent play")
     play_parser.add_argument("model_path", type=str, help="Path to saved model checkpoint")
     play_parser.add_argument("--play-episodes", type=int, default=5, help="Number of episodes to play")
+    play_parser.add_argument("--delay", type=float, default=0.033,
+                             help="Seconds to sleep between frames. "
+                                  "0=full speed, 0.033=normal (~30fps), 0.1=slow, 0.3=very slow")
+    play_parser.add_argument("--eval-epsilon", type=float, default=0.0,
+                             help="Small epsilon during play to break deterministic loops (e.g. 0.05)")
 
     args = parser.parse_args()
     if args.mode is None:
