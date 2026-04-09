@@ -146,8 +146,9 @@ class CustomRewardWrapper(gym.Wrapper):
     - Bonus for clearing the level
     """
 
-    def __init__(self, env):
+    def __init__(self, env, death_penalty=50.0):
         super().__init__(env)
+        self._death_penalty = death_penalty
         self._last_x_pos = 0
         self._last_status = "small"
 
@@ -168,7 +169,7 @@ class CustomRewardWrapper(gym.Wrapper):
         # Penalty for dying
         death_penalty = 0
         if done and info.get("flag_get", False) is False:
-            death_penalty = -50.0
+            death_penalty = -self._death_penalty
 
         # Bonus for completing the level (reaching the flag)
         flag_bonus = 0
@@ -189,7 +190,7 @@ class CustomRewardWrapper(gym.Wrapper):
         return obs, shaped_reward, done, info
 
 
-def make_mario_env(use_custom_rewards=True):
+def make_mario_env(use_custom_rewards=True, death_penalty=50.0):
     """Create and wrap the Super Mario Bros. environment.
 
     Args:
@@ -217,7 +218,7 @@ def make_mario_env(use_custom_rewards=True):
 
     # Apply custom reward shaping
     if use_custom_rewards:
-        env = CustomRewardWrapper(env)
+        env = CustomRewardWrapper(env, death_penalty=death_penalty)
 
     # Frame preprocessing pipeline
     env = SkipFrame(env, skip=4)

@@ -380,6 +380,8 @@ def train(args):
     best_x_pos = 0
     flags_reached = 0
 
+    latest_metrics = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0}
+
     log_file = log_dir / "training_log.csv"
     with open(log_file, "w") as f:
         f.write("episode,reward,length,x_pos,policy_loss,value_loss,entropy,flag_reached,time\n")
@@ -426,7 +428,11 @@ def train(args):
                 with open(log_file, "a") as f:
                     f.write(
                         f"{episode_num},{episode_reward:.2f},{episode_length},"
-                        f"{max_x_pos},0,0,0,{int(flag_reached)},{elapsed:.1f}\n"
+                        f"{max_x_pos},"
+                        f"{latest_metrics['policy_loss']:.6f},"
+                        f"{latest_metrics['value_loss']:.6f},"
+                        f"{latest_metrics['entropy']:.6f},"
+                        f"{int(flag_reached)},{elapsed:.1f}\n"
                     )
 
                 if episode_num % args.log_interval == 0:
@@ -456,7 +462,7 @@ def train(args):
 
         # PPO update
         if agent.buffer.ptr == args.n_steps:
-            metrics = agent.update(state)
+            latest_metrics = agent.update(state)
 
     agent.save(checkpoint_dir / "final_model.pt")
     env.close()

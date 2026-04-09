@@ -177,7 +177,8 @@ class DQNAgent:
 
         # Target Q-values: r + gamma * max_a' Q_target(s', a')
         with torch.no_grad():
-            next_q_values = self.target_net(next_states_t).max(dim=1)[0]
+            best_next_actions = self.policy_net(next_states_t).argmax(dim=1, keepdim=True)
+            next_q_values = self.target_net(next_states_t).gather(1, best_next_actions).squeeze(1)
             target_q_values = rewards_t + self.gamma * next_q_values * (1 - dones_t)
 
         loss = self.loss_fn(q_values, target_q_values)
@@ -464,14 +465,20 @@ def parse_args():
     train_parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor")
     train_parser.add_argument("--epsilon-start", type=float, default=1.0, help="Starting epsilon")
     train_parser.add_argument("--epsilon-end", type=float, default=0.02, help="Final epsilon")
-    train_parser.add_argument("--epsilon-decay", type=int, default=100_000, help="Steps over which epsilon decays")
+    train_parser.add_argument("--epsilon-decay", type=int, default=100_000,
+                              help="Steps over which epsilon decays")
     train_parser.add_argument("--buffer-size", type=int, default=100_000, help="Replay buffer capacity")
-    train_parser.add_argument("--target-update", type=int, default=10_000, help="Steps between target net updates")
-    train_parser.add_argument("--checkpoint-dir", type=str, default="checkpoints/dqn", help="Checkpoint directory")
+    train_parser.add_argument("--target-update", type=int, default=10_000,
+                              help="Steps between target net updates")
+    train_parser.add_argument("--checkpoint-dir", type=str, default="checkpoints/dqn",
+                              help="Checkpoint directory")
     train_parser.add_argument("--log-dir", type=str, default="logs/dqn", help="Log directory")
     train_parser.add_argument("--log-interval", type=int, default=20, help="Episodes between log prints")
-    train_parser.add_argument("--save-interval", type=int, default=500, help="Episodes between checkpoint saves")
+    train_parser.add_argument("--save-interval", type=int, default=500,
+                              help="Episodes between checkpoint saves")
     train_parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
+    train_parser.add_argument("--death-penalty", type=float, default=100.0,
+                              help="Magnitude of dead penalty passed to reward wrapper")
 
     # Play subcommand
     play_parser = subparsers.add_parser("play", help="Watch a trained agent play")
