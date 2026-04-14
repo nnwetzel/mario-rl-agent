@@ -146,20 +146,24 @@ class CustomRewardWrapper(gym.Wrapper):
     - Bonus for clearing the level
     """
 
-    def __init__(self, env, death_penalty=50.0):
+    def __init__(self, env, death_penalty=50.0, time_penalty_start_step=200):
         super().__init__(env)
         self._death_penalty = death_penalty
+        self._time_penalty_start_step = time_penalty_start_step
         self._last_x_pos = 0
         self._last_status = "small"
+        self._step_count = 9
 
     def reset(self):
         obs = self.env.reset()
         self._last_x_pos = 0
         self._last_status = "small"
+        self._step_count = 0
         return obs
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
+        self._step_count += 1
 
         # Reward for moving right (forward progress)
         x_pos = info.get("x_pos", 0)
@@ -184,18 +188,22 @@ class CustomRewardWrapper(gym.Wrapper):
         self._last_status = current_status
 
         # Small time penalty to encourage faster completion
-        time_penalty = -0.1
+        time_penalty = -0.1 if self._step_count > self._time_penalty_start_step else 0.0
 
         shaped_reward = x_reward + death_penalty + flag_bonus + status_penalty + time_penalty
         return obs, shaped_reward, done, info
 
 
-def make_mario_env(use_custom_rewards=True, death_penalty=50.0):
+def make_mario_env(use_custom_rewards=True, death_penalty=50.0, time_penalty_start_step=200):
     """Create and wrap the Super Mario Bros. environment.
 
     Args:
         use_custom_rewards: If True, apply custom reward shaping.
                            If False, use the default env rewards.
+        death_penalty: Reward penalty applied on death.
+        time_penalty_start_step: Step within an episode after which the per-step
+                                 time penalty kicks in. Set to 0 to apply from
+                                 the start, or a large number to disable it.
 
     Returns:
         Wrapped gym environment ready for training.
@@ -218,7 +226,7 @@ def make_mario_env(use_custom_rewards=True, death_penalty=50.0):
 
     # Apply custom reward shaping
     if use_custom_rewards:
-        env = CustomRewardWrapper(env, death_penalty=death_penalty)
+        env = CustomRewardWrapper(env, death_penalty=death_penalty, time_penalty_start_step=time_penalty_start_step)
 
     # Frame preprocessing pipeline
     env = SkipFrame(env, skip=4)

@@ -232,9 +232,10 @@ class PPOAgent:
             action, log_prob, _, value = self.network.get_action_and_value(state_t)
         return action.item(), log_prob.item(), value.item()
 
-    def update(self, next_state):
+    def update(self, next_state, initial_lr, total_steps_budget):
         """Perform PPO update using collected rollout data.
 
+        Applies linear LR decay over the course of training.
         Returns dict of training metrics.
         """
         # Bootstrap value for the last state
@@ -307,12 +308,19 @@ class PPOAgent:
                 total_entropy += entropy_loss.item()
                 n_updates += 1
 
+        # Linear LR decay: ramp from initial_lr down to 10% of it over training
+        frac = 1.0 - (self.total_steps / total_steps_budget)
+        lr_now = initial_lr * max(frac, 0.1)
+        for param_group in self.optimizer.param_groups:
+            param_group["lr"] = lr_now
+
         self.buffer.reset()
 
         return {
             "policy_loss": total_policy_loss / max(n_updates, 1),
             "value_loss": total_value_loss / max(n_updates, 1),
             "entropy": total_entropy / max(n_updates, 1),
+            "lr": lr_now,
         }
 
     def save(self, path):
@@ -373,6 +381,10 @@ def train(args):
         agent.load(args.resume)
         print(f"Resumed from checkpoint: {args.resume}")
 
+    # Total step budget used for LR decay scheduling.
+    AVG_EPISODE_LENGTH = 200
+    total_steps_budget = args.episodes * AVG_EPISODE_LENGTH
+
     # Tracking
     episode_rewards = []
     episode_lengths = []
@@ -380,11 +392,11 @@ def train(args):
     best_x_pos = 0
     flags_reached = 0
 
-    latest_metrics = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0}
+    latest_metrics = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0, "lr": args.lr}
 
     log_file = log_dir / "training_log.csv"
     with open(log_file, "w") as f:
-        f.write("episode,reward,length,x_pos,policy_loss,value_loss,entropy,flag_reached,time\n")
+        f.write("episode,reward,length,x_pos,policy_loss,value_loss,entropy,lr,flag_reached,time\n")
 
     start_time = time.time()
     state = env.reset()
@@ -432,6 +444,7 @@ def train(args):
                         f"{latest_metrics['policy_loss']:.6f},"
                         f"{latest_metrics['value_loss']:.6f},"
                         f"{latest_metrics['entropy']:.6f},"
+                        f"{latest_metrics['lr']:.2e},"
                         f"{int(flag_reached)},{elapsed:.1f}\n"
                     )
 
@@ -445,6 +458,7 @@ def train(args):
                         f"Best X: {best_x_pos:5d} | "
                         f"Flags: {flags_reached} | "
                         f"Steps: {agent.total_steps:7d} | "
+                        f"LR: {latest_metrics['lr']:.2e} | "
                         f"Time: {elapsed:.0f}s"
                     )
 
@@ -462,7 +476,7 @@ def train(args):
 
         # PPO update
         if agent.buffer.ptr == args.n_steps:
-            latest_metrics = agent.update(state)
+            latest_metrics = agent.update(state, args.lr, total_steps_budget)
 
     agent.save(checkpoint_dir / "final_model.pt")
     env.close()
@@ -552,6 +566,8 @@ def parse_args():
     train_parser.add_argument("--log-interval", type=int, default=20, help="Episodes between log prints")
     train_parser.add_argument("--save-interval", type=int, default=500, help="Episodes between checkpoint saves")
     train_parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
+    train_parser.add_argument("--death-penalty", type=float, default=100.0,
+                              help="Magnitude of dead penalty passed to reward wrapper")
 
     # Play subcommand
     play_parser = subparsers.add_parser("play", help="Watch a trained agent play")
