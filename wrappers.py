@@ -194,7 +194,12 @@ class CustomRewardWrapper(gym.Wrapper):
         return obs, shaped_reward, done, info
 
 
-def make_mario_env(use_custom_rewards=True, death_penalty=50.0, time_penalty_start_step=200):
+def make_mario_env(
+    use_custom_rewards=True,
+    death_penalty=50.0,
+    time_penalty_start_step=200,
+    render=False,
+):
     """Create and wrap the Super Mario Bros. environment.
 
     Args:
@@ -204,9 +209,11 @@ def make_mario_env(use_custom_rewards=True, death_penalty=50.0, time_penalty_sta
         time_penalty_start_step: Step within an episode after which the per-step
                                  time penalty kicks in. Set to 0 to apply from
                                  the start, or a large number to disable it.
+        render: Kept for compatibility with callers. Rendering is handled
+                manually through env.render() in older nes-py/gym versions.
 
     Returns:
-        Wrapped gym environment ready for training.
+        Wrapped gym environment ready for training or evaluation.
     """
     import gym_super_mario_bros
     from nes_py.wrappers import JoypadSpace
@@ -226,7 +233,11 @@ def make_mario_env(use_custom_rewards=True, death_penalty=50.0, time_penalty_sta
 
     # Apply custom reward shaping
     if use_custom_rewards:
-        env = CustomRewardWrapper(env, death_penalty=death_penalty, time_penalty_start_step=time_penalty_start_step)
+        env = CustomRewardWrapper(
+            env,
+            death_penalty=death_penalty,
+            time_penalty_start_step=time_penalty_start_step,
+        )
 
     # Frame preprocessing pipeline
     env = SkipFrame(env, skip=4)

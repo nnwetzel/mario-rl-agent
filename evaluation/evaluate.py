@@ -18,6 +18,7 @@ import argparse
 import csv
 
 import torch
+import time
 
 from train_dqn import DQNAgent
 from train_ppo import PPOAgent
@@ -63,7 +64,15 @@ def select_action(agent, model_type, state):
     raise ValueError(f"Unsupported model_type: {model_type}")
 
 
-def evaluate_model(model_type, model_path, episodes=10, output_path=None, eval_epsilon=0.0):
+def evaluate_model(
+    model_type,
+    model_path,
+    episodes=10,
+    output_path=None,
+    eval_epsilon=0.0,
+    render=False,
+    delay=0.0,
+):
     """
     Evaluate a trained model over multiple episodes and optionally save results to CSV.
     """
@@ -91,6 +100,11 @@ def evaluate_model(model_type, model_path, episodes=10, output_path=None, eval_e
         max_x = 0
 
         while True:
+            if render:
+                env.render()
+                if delay > 0:
+                    time.sleep(delay)
+
             action = select_action(agent, model_type, state)
             state, reward, done, info = env.step(action)
 
@@ -142,7 +156,9 @@ def evaluate_model(model_type, model_path, episodes=10, output_path=None, eval_e
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_file, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["episode", "reward", "steps", "max_x", "flag"])
+            writer = csv.DictWriter(
+                f, fieldnames=["episode", "reward", "steps", "max_x", "flag"]
+            )
             writer.writeheader()
             writer.writerows(results)
 
@@ -153,16 +169,47 @@ def evaluate_model(model_type, model_path, episodes=10, output_path=None, eval_e
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate trained DQN or PPO Mario agents")
-    parser.add_argument("--model-type", choices=["dqn", "ppo"], required=True,
-                        help="Type of model to evaluate")
-    parser.add_argument("--model-path", type=str, required=True,
-                        help="Path to trained checkpoint file")
-    parser.add_argument("--episodes", type=int, default=10,
-                        help="Number of evaluation episodes")
-    parser.add_argument("--output-path", type=str, default=None,
-                        help="Path to save CSV results")
-    parser.add_argument("--eval-epsilon", type=float, default=0.0,
-                        help="Evaluation epsilon for DQN only (default: 0.0)")
+    parser.add_argument(
+        "--model-type",
+        choices=["dqn", "ppo"],
+        required=True,
+        help="Type of model to evaluate",
+    )
+    parser.add_argument(
+        "--model-path",
+        type=str,
+        required=True,
+        help="Path to trained checkpoint file",
+    )
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=10,
+        help="Number of evaluation episodes",
+    )
+    parser.add_argument(
+        "--output-path",
+        type=str,
+        default=None,
+        help="Path to save CSV results",
+    )
+    parser.add_argument(
+        "--eval-epsilon",
+        type=float,
+        default=0.0,
+        help="Evaluation epsilon for DQN only (default: 0.0)",
+    )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Render gameplay during evaluation for demo recording",
+    )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=0.0,
+        help="Seconds to pause between rendered steps (for demo recording)",
+    )
     return parser.parse_args()
 
 
@@ -174,4 +221,6 @@ if __name__ == "__main__":
         episodes=args.episodes,
         output_path=args.output_path,
         eval_epsilon=args.eval_epsilon,
+        render=args.render,
+        delay=args.delay,
     )
