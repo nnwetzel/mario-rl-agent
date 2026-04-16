@@ -1,45 +1,117 @@
 # Mario RL Agent — World 1-1
 
-Reinforcement learning agents (DQN and PPO) trained to beat Super Mario Bros. World 1-1.
+This project explores reinforcement learning by training agents to play Super Mario Bros World 1-1 using two different algorithms:
 
-## Setup
+- Deep Q-Networks (DQN)
+- Proximal Policy Optimization (PPO)
 
-```bash
-pip install -r requirements.txt
-```
+We compare how each method learns to navigate the level, maximize reward, and progress toward completion.
 
-> **Note:** `nes-py` may require system dependencies on Linux: `sudo apt-get install cmake libz-dev`
+---
+
+## Project Overview
+
+Although Super Mario Bros appears simple, it requires precise and sequential decision making. Every action affects future states, making it a natural reinforcement learning problem.
+
+Our goal is to train agents that learn to complete World 1-1 through repeated interaction with the environment.
+
+---
+
+## Methods
+
+### DQN (Deep Q-Network)
+- Value-based method
+- Uses experience replay and target networks
+
+### PPO (Proximal Policy Optimization)
+- Policy-based method
+- Uses actor critic architecture
+
+---
+
+## Environment
+
+We use the gym-super-mario-bros environment with:
+
+- Frame skipping
+- Grayscale conversion
+- Image resizing (84x84)
+- Frame stacking (4 frames)
+- Reward shaping
+
+Reward is based on:
+- Forward progress (x-position)
+- Survival
+- Level completion
+
+---
 
 ## Training
 
-### DQN
-```bash
+Install dependencies:
+
+pip install -r requirements.txt
+
+Train DQN:
+
 python train_dqn.py train --episodes 5000
-```
 
-### PPO
-```bash
+Train PPO:
+
 python train_ppo.py train --episodes 5000
-```
 
-Both scripts save checkpoints to `checkpoints/<algorithm>/` and training logs to `logs/<algorithm>/`.
+Outputs:
+- checkpoints/<algorithm>/
+- logs/<algorithm>/
 
-## Watching a Trained Agent Play
+---
 
-```bash
-python train_dqn.py play checkpoints/dqn/best_model.pt
-python train_ppo.py play checkpoints/ppo/best_model.pt
-```
+## Evaluation
 
-## Key Hyperparameters
+Run evaluation:
 
-Run `python train_dqn.py train --help` or `python train_ppo.py train --help` to see all options.
+python evaluation/evaluate.py --model-type dqn --model-path checkpoints/dqn/best_model.pt --episodes 5
 
-## Project Structure
+python evaluation/evaluate.py --model-type ppo --model-path checkpoints/ppo/best_model.pt --episodes 5
 
-| File | Description |
-|------|-------------|
-| `wrappers.py` | Environment wrappers (frame skip, grayscale, resize, stacking, reward shaping) |
-| `train_dqn.py` | DQN agent with experience replay and target network |
-| `train_ppo.py` | PPO agent with actor-critic and GAE |
-| `requirements.txt` | Python dependencies |
+Optional demo rendering:
+--render --delay 0.03
+
+---
+
+## Metrics
+
+We evaluate using:
+- Total reward
+- Max x-position
+- Completion rate
+- Episode length
+
+---
+
+## Results
+
+- DQN reached higher reward and farther progress
+- PPO was less consistent
+- Neither consistently completed the level
+
+---
+
+## Structure
+
+- wrappers.py
+- train_dqn.py
+- train_ppo.py
+- evaluation/evaluate.py
+- checkpoints/
+- logs/
+- results/
+
+---
+
+## Team
+
+- Nick Connors
+- Shoumik Majumdar
+- Matthew Montoya-Figueroa
+- Nathaniel Wetzel
